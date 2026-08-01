@@ -1,24 +1,29 @@
-import { Router } from "express";
-import { z } from "zod";
+import { Router } from 'express';
+import { z } from 'zod';
 import {
   createMatchSchema,
   listMatchesQuerySchema,
-} from "../validation/matches.js";
-import { matches } from "../db/schema.js";
-import { db } from "../db/db.js";
-import { getMatchStatus } from "../utils/match-status.js";
-import { desc } from "drizzle-orm";
+} from '../validation/matches.js';
+import { matches } from '../db/schema.js';
+import { db } from '../db/db.js';
+import { getMatchStatus } from '../utils/match-status.js';
+import { desc } from 'drizzle-orm';
 
 export const matchRouter = Router();
 
 const MAX_LIMIT = 100;
 
-matchRouter.get("/", async (req, res) => {
+/**
+ * List matches ordered by newest first.
+ * @param {import('express').Request} req - Express request with optional limit query.
+ * @param {import('express').Response} res - Express response.
+ */
+async function listMatches(req, res) {
   const parsed = listMatchesQuerySchema.safeParse(req.query);
 
   if (!parsed.success) {
     return res.status(400).json({
-      error: "Invalid query.",
+      error: 'Invalid query.',
       details: z.treeifyError(parsed.error),
     });
   }
@@ -35,17 +40,22 @@ matchRouter.get("/", async (req, res) => {
     res.json({ data });
   } catch (error) {
     res.status(500).json({
-      error: "Failed to list matches.",
+      error: 'Failed to list matches.',
     });
   }
-});
+}
 
-matchRouter.post("/", async (req, res) => {
+/**
+ * Create a match, derive its status, and broadcast to WebSocket clients.
+ * @param {import('express').Request} req - Express request with match payload.
+ * @param {import('express').Response} res - Express response.
+ */
+async function createMatch(req, res) {
   const parsed = createMatchSchema.safeParse(req.body);
 
   if (!parsed.success) {
     return res.status(400).json({
-      error: "Invalid payload.",
+      error: 'Invalid payload.',
       details: z.treeifyError(parsed.error),
     });
   }
@@ -65,11 +75,18 @@ matchRouter.post("/", async (req, res) => {
       })
       .returning();
 
+    if (res.app.locals.broadcastMatchCreated) {
+      res.app.locals.broadcastMatchCreated(event);
+    }
+
     res.status(201).json({ data: event });
   } catch (error) {
     console.error(error);
     res.status(500).json({
-      error: "Failed to create match.",
+      error: 'Failed to create match.',
     });
   }
-});
+}
+
+matchRouter.get('/', listMatches);
+matchRouter.post('/', createMatch);

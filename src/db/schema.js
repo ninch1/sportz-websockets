@@ -1,3 +1,7 @@
+/**
+ * PostgreSQL schema for the real-time sports application.
+ * Defines match status enum, matches, and commentary tables.
+ */
 import {
   integer,
   jsonb,
@@ -8,12 +12,14 @@ import {
   timestamp,
 } from 'drizzle-orm/pg-core';
 
+/** Match lifecycle states stored in Postgres. */
 export const matchStatusEnum = pgEnum('match_status', [
   'scheduled',
   'live',
   'finished',
 ]);
 
+/** Scheduled and live sports matches with scores and timing. */
 export const matches = pgTable('matches', {
   id: serial('id').primaryKey(),
   sport: text('sport').notNull(),
@@ -27,6 +33,7 @@ export const matches = pgTable('matches', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+/** Chronological commentary and events for a match. */
 export const commentary = pgTable('commentary', {
   id: serial('id').primaryKey(),
   matchId: integer('match_id')
