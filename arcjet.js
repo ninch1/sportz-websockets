@@ -1,4 +1,5 @@
 import arcjet, { detectBot, shield, slidingWindow } from '@arcjet/node';
+import { isMissingUserAgent } from '@arcjet/inspect';
 
 const arcjetKey = process.env.ARCJET_KEY;
 const arcjetMode = process.env.ARCJET_MODE === 'DRY_RUN' ? 'DRY_RUN' : 'LIVE';
@@ -12,7 +13,13 @@ export const httpArcjet = arcjetKey
         shield({ mode: arcjetMode }),
         detectBot({
           mode: arcjetMode,
-          allow: ['CATEGORY:SEARCH_ENGINE', 'CATEGORY:PREVIEW'],
+          allow: [
+            'CATEGORY:SEARCH_ENGINE',
+            'CATEGORY:PREVIEW',
+            'CATEGORY:TOOL',
+            'CATEGORY:PROGRAMMATIC',
+            'CURL',
+          ],
         }),
         slidingWindow({ mode: arcjetMode, interval: '10s', max: 50 }),
       ],
@@ -26,12 +33,39 @@ export const wsArcjet = arcjetKey
         shield({ mode: arcjetMode }),
         detectBot({
           mode: arcjetMode,
-          allow: ['CATEGORY:SEARCH_ENGINE', 'CATEGORY:PREVIEW'],
+          allow: [
+            'CATEGORY:SEARCH_ENGINE',
+            'CATEGORY:PREVIEW',
+            'CATEGORY:TOOL',
+            'CATEGORY:PROGRAMMATIC',
+            'CURL',
+          ],
         }),
         slidingWindow({ mode: arcjetMode, interval: '2s', max: 5 }),
       ],
     })
   : null;
+
+/**
+ * Whether an Arcjet decision failed due to a missing User-Agent header.
+ * @param {{ results: Array<{ reason: unknown }> }} decision - Protect decision.
+ * @returns {boolean}
+ */
+export function hasMissingUserAgent(decision) {
+  return decision.results.some(isMissingUserAgent);
+}
+
+/**
+ * Whether an Arcjet decision reports an unexpected rule error.
+ * @param {{ isErrored: () => boolean, results: Array<{ reason: { isError: () => boolean } }> }} decision - Protect decision.
+ * @returns {boolean}
+ */
+export function isArcjetErrored(decision) {
+  return (
+    decision.isErrored() ||
+    decision.results.some((result) => result.reason.isError())
+  );
+}
 
 export function securityMiddleware() {
   return async (req, res, next) => {
@@ -40,10 +74,11 @@ export function securityMiddleware() {
     try {
       const decision = await httpArcjet.protect(req);
 
-      if (
-        decision.isErrored() ||
-        decision.results.some((result) => result.reason.isError())
-      ) {
+      if (hasMissingUserAgent(decision)) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      if (isArcjetErrored(decision)) {
         return res.status(503).json({ error: 'Service Unavailable' });
       }
 
