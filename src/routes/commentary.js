@@ -6,7 +6,7 @@ import {
   createCommentarySchema,
   listCommentaryQuerySchema,
 } from '../validation/commentary.js';
-import { commentary } from '../db/schema.js';
+import { commentary, matches } from '../db/schema.js';
 import { db } from '../db/db.js';
 
 export const commentaryRouter = Router({ mergeParams: true });
@@ -18,7 +18,7 @@ const MAX_LIMIT = 100;
  * @param {import('express').Request} req - Express request with match id param and optional limit query.
  * @param {import('express').Response} res - Express response.
  */
-async function listCommentary(req, res) {
+export async function listCommentary(req, res) {
   const params = matchIdParamSchema.safeParse(req.params);
   if (!params.success) {
     return res.status(400).json({
@@ -59,7 +59,7 @@ async function listCommentary(req, res) {
  * @param {import('express').Request} req - Express request with match id param and commentary body.
  * @param {import('express').Response} res - Express response.
  */
-async function createCommentary(req, res) {
+export async function createCommentary(req, res) {
   const params = matchIdParamSchema.safeParse(req.params);
   if (!params.success) {
     return res.status(400).json({
@@ -77,6 +77,18 @@ async function createCommentary(req, res) {
   }
 
   try {
+    const [match] = await db
+      .select()
+      .from(matches)
+      .where(eq(matches.id, params.data.id))
+      .limit(1);
+
+    if (!match) {
+      return res.status(404).json({
+        error: 'Match not found.',
+      });
+    }
+
     const [event] = await db
       .insert(commentary)
       .values({

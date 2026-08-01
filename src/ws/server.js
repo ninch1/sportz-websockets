@@ -6,6 +6,7 @@ import {
 } from '../../arcjet.js';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
+const MAX_MATCH_SUBSCRIPTIONS = 50;
 
 const matchSubscribers = new Map();
 
@@ -15,10 +16,6 @@ function subscribe(matchId, socket) {
   }
 
   matchSubscribers.get(matchId).add(socket);
-
-  return () => {
-    matchSubscribers.get(matchId).delete(socket);
-  };
 }
 
 function unsubscribe(matchId, socket) {
@@ -87,6 +84,19 @@ function handleMessage(socket, data) {
   }
 
   if (message?.type === 'subscribe' && Number.isInteger(message.matchId)) {
+    if (socket.subscriptions.has(message.matchId)) {
+      sendJson(socket, { type: 'subscribed', matchId: message.matchId });
+      return;
+    }
+
+    if (socket.subscriptions.size >= MAX_MATCH_SUBSCRIPTIONS) {
+      sendJson(socket, {
+        type: 'error',
+        message: 'Subscription limit reached',
+      });
+      return;
+    }
+
     subscribe(message.matchId, socket);
     socket.subscriptions.add(message.matchId);
     sendJson(socket, { type: 'subscribed', matchId: message.matchId });
