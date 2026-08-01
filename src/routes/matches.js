@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import {
   createMatchSchema,
   listMatchesQuerySchema,
@@ -18,7 +19,7 @@ matchRouter.get("/", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({
       error: "Invalid query.",
-      details: JSON.stringify(parsed.error),
+      details: z.treeifyError(parsed.error),
     });
   }
 
@@ -41,16 +42,15 @@ matchRouter.get("/", async (req, res) => {
 
 matchRouter.post("/", async (req, res) => {
   const parsed = createMatchSchema.safeParse(req.body);
-  const {
-    data: { startTime, endTime, homeScore, awayScore },
-  } = parsed;
 
   if (!parsed.success) {
     return res.status(400).json({
       error: "Invalid payload.",
-      details: JSON.stringify(parsed.error),
+      details: z.treeifyError(parsed.error),
     });
   }
+
+  const { startTime, endTime, homeScore, awayScore } = parsed.data;
 
   try {
     const [event] = await db
@@ -66,9 +66,10 @@ matchRouter.post("/", async (req, res) => {
       .returning();
 
     res.status(201).json({ data: event });
-  } catch (e) {
-    res
-      .status(500)
-      .json({ error: "Failed to create match.", details: JSON.stringify(e) });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: "Failed to create match.",
+    });
   }
 });
