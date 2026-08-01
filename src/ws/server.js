@@ -1,4 +1,5 @@
 import { WebSocketServer, WebSocket } from 'ws';
+import { wsArcjet } from '../../arcjet.js';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
@@ -27,6 +28,17 @@ function broadcast(wss, payload) {
 }
 
 /**
+ * Write an HTTP error response and destroy the upgrade socket.
+ * @param {import('stream').Duplex} socket - Raw TCP socket from the upgrade event.
+ * @param {number} status - HTTP status code.
+ * @param {string} message - Reason phrase.
+ */
+function rejectUpgrade(socket, status, message) {
+  socket.write(`HTTP/1.1 ${status} ${message}\r\nConnection: close\r\n\r\n`);
+  socket.destroy();
+}
+
+/**
  * Attach a WebSocket server to an HTTP server for real-time match events.
  * Uses protocol-level ping/pong heartbeats to drop dead connections.
  * @param {import('http').Server} server - HTTP server instance to upgrade.
@@ -34,8 +46,7 @@ function broadcast(wss, payload) {
  */
 export function attachWebSocketServer(server) {
   const wss = new WebSocketServer({
-    server,
-    path: '/ws',
+    noServer: true,
     maxPayload: 1024 * 1024,
   });
 
@@ -50,6 +61,46 @@ export function attachWebSocketServer(server) {
       client.ping();
     }
   }, HEARTBEAT_INTERVAL_MS);
+
+  server.on('upgrade', async (req, socket, head) => {
+    const { pathname } = new URL(req.url || '/', 'http://localhost');
+    if (pathname !== '/ws') {
+      socket.destroy();
+      return;
+    }
+
+    if (wsArcjet) {
+      try {
+        const decision = await wsArcjet.protect(req);
+
+        if (
+          decision.isErrored() ||
+          decision.results.some((result) => result.reason.isError())
+        ) {
+          rejectUpgrade(socket, 503, 'Service Unavailable');
+          return;
+        }
+
+        if (decision.isDenied()) {
+          if (decision.reason.isRateLimit()) {
+            rejectUpgrade(socket, 429, 'Too Many Requests');
+            return;
+          }
+
+          rejectUpgrade(socket, 403, 'Forbidden');
+          return;
+        }
+      } catch (error) {
+        console.error('WS upgrade error', error);
+        rejectUpgrade(socket, 503, 'Service Unavailable');
+        return;
+      }
+    }
+
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit('connection', ws, req);
+    });
+  });
 
   wss.on('connection', (socket) => {
     socket.isAlive = true;
