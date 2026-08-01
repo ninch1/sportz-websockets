@@ -13,7 +13,12 @@ export const matchRouter = Router();
 
 const MAX_LIMIT = 100;
 
-matchRouter.get('/', async (req, res) => {
+/**
+ * List matches ordered by newest first.
+ * @param {import('express').Request} req - Express request with optional limit query.
+ * @param {import('express').Response} res - Express response.
+ */
+async function listMatches(req, res) {
   const parsed = listMatchesQuerySchema.safeParse(req.query);
 
   if (!parsed.success) {
@@ -38,9 +43,14 @@ matchRouter.get('/', async (req, res) => {
       error: 'Failed to list matches.',
     });
   }
-});
+}
 
-matchRouter.post('/', async (req, res) => {
+/**
+ * Create a match, derive its status, and broadcast to WebSocket clients.
+ * @param {import('express').Request} req - Express request with match payload.
+ * @param {import('express').Response} res - Express response.
+ */
+async function createMatch(req, res) {
   const parsed = createMatchSchema.safeParse(req.body);
 
   if (!parsed.success) {
@@ -76,4 +86,7 @@ matchRouter.post('/', async (req, res) => {
       error: 'Failed to create match.',
     });
   }
-});
+}
+
+matchRouter.get('/', listMatches);
+matchRouter.post('/', createMatch);

@@ -1,3 +1,6 @@
+/**
+ * HTTP and WebSocket entrypoint for the Sportz real-time sports API.
+ */
 import express from 'express';
 import http from 'http';
 import { matchRouter } from './routes/matches.js';
@@ -11,7 +14,12 @@ const server = http.createServer(app);
 
 app.use(express.json());
 
-app.get('/', (req, res) => {
+/**
+ * Health/root handler confirming the API process is up.
+ * @param {import('express').Request} _req - Express request.
+ * @param {import('express').Response} res - Express response.
+ */
+app.get('/', (_req, res) => {
   res.send('Hello from Express server!');
 });
 
