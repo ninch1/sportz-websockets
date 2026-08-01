@@ -40,6 +40,13 @@ export function securityMiddleware() {
     try {
       const decision = await httpArcjet.protect(req);
 
+      if (
+        decision.isErrored() ||
+        decision.results.some((result) => result.reason.isError())
+      ) {
+        return res.status(503).json({ error: 'Service Unavailable' });
+      }
+
       if (decision.isDenied()) {
         if (decision.reason.isRateLimit()) {
           return res.status(429).json({ error: 'Too many requests' });
